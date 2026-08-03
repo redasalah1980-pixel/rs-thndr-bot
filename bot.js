@@ -313,6 +313,7 @@ async function pollUpdates() {
 async function buildFullSummary() {
   const portfolio = await getFirebaseData('portfolio');
   const watchlist = await getFirebaseData('watchlist');
+  const goldData = await getFirebaseData('gold_portfolio');
 
   let msg = '';
 
@@ -321,7 +322,6 @@ async function buildFullSummary() {
     const stocks = Object.values(portfolio);
     let totalCost = 0, totalValue = 0;
     let stockLines = '';
-
     for (const s of stocks) {
       const cost = (s.buyPrice || 0) * (s.shares || 0);
       const value = (s.currentPrice || s.buyPrice || 0) * (s.shares || 0);
@@ -332,10 +332,8 @@ async function buildFullSummary() {
       const arrow = pnl >= 0 ? '📈' : '📉';
       stockLines += `${arrow} <b>${s.symbol}</b> — ${(s.currentPrice || s.buyPrice).toFixed(2)} ج.م (${pnl >= 0 ? '+' : ''}${pct.toFixed(1)}%)\n`;
     }
-
     const totalPnl = totalValue - totalCost;
     const totalPct = totalCost > 0 ? (totalPnl / totalCost * 100) : 0;
-
     msg += `💼 <b>المحفظة (${stocks.length} أسهم):</b>\n`;
     msg += stockLines;
     msg += `\n💰 الإجمالي: ${totalValue.toFixed(0)} ج.م\n`;
@@ -344,19 +342,28 @@ async function buildFullSummary() {
     msg += `💼 <b>المحفظة:</b> فاضية\n`;
   }
 
+  // الذهب
+  if (goldData && goldData.grams) {
+    const goldBuy = goldData.buyPrice * goldData.grams;
+    const goldCurrent = goldData.currentPrice * goldData.grams;
+    const goldPnl = goldCurrent - goldBuy;
+    const goldPct = goldBuy > 0 ? (goldPnl / goldBuy * 100) : 0;
+    msg += `\n🥇 <b>الذهب:</b>\n`;
+    msg += `${goldPnl >= 0 ? '📈' : '📉'} ${goldData.grams} جرام — ${goldCurrent.toFixed(2)} ج.م\n`;
+    msg += `${goldPnl >= 0 ? '✅' : '❌'} ربح/خسارة: ${goldPnl >= 0 ? '+' : ''}${goldPnl.toFixed(2)} ج.م (${goldPct >= 0 ? '+' : ''}${goldPct.toFixed(1)}%)\n`;
+    msg += `💰 سعر الجرام: ${goldData.currentPrice.toFixed(2)} ج.م\n`;
+  }
+
   // المراقبة
   if (watchlist && Object.keys(watchlist).length > 0) {
     const watches = Object.values(watchlist);
     msg += `\n⭐ <b>المراقبة (${watches.length} أسهم):</b>\n`;
     for (const w of watches) {
-      const diff = w.current && w.target ? ((w.current - w.target) / w.target * 100) : null;
       const reached = w.current <= w.target;
-      const close = diff !== null && diff <= 10 && diff > 0;
-      const status = reached ? '🟢 وصل الهدف!' : close ? '🟡 قريب' : '⏳ بعيد';
-      msg += `${status} <b>${w.symbol}</b> — دلوقتي: ${(w.current || 0).toFixed(2)} / هدف: ${(w.target || 0).toFixed(2)} ج.م\n`;
+      const close = w.current && w.target && ((w.current - w.target) / w.target * 100) <= 10 && !reached;
+      const status = reached ? '🟢 وصل!' : close ? '🟡 قريب' : '⏳';
+      msg += `${status} <b>${w.symbol}</b> — دلوقتي: ${(w.current||0).toFixed(2)} / هدف: ${(w.target||0).toFixed(2)} ج.م\n`;
     }
-  } else {
-    msg += `\n⭐ <b>المراقبة:</b> فاضية\n`;
   }
 
   return msg;
