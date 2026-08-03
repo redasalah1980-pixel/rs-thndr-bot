@@ -186,12 +186,48 @@ async function checkAlerts() {
       const price = await getStockPrice(stock.symbol);
       if (!price) continue;
       await updateFirebase(`portfolio/${key}`, { currentPrice: price });
+
+      // تنبيه هدف الربح
       if (stock.alertUp && price >= stock.alertUp) {
-        await sendMessage(`🟢 <b>تنبيه صعود!</b>\n\n📌 <b>${stock.symbol}</b>\n💰 السعر: ${price.toFixed(2)} ج.م\n🎯 هدفك: ${stock.alertUp} ج.م\n\n✅ وصل هدف الصعود!\n\n📱 <i>مساعد ثاندر RS</i>`);
+        const profitPerShare = (price - stock.buyPrice).toFixed(2);
+        const totalProfit = (profitPerShare * stock.shares).toFixed(2);
+        const profitPct = ((price - stock.buyPrice) / stock.buyPrice * 100).toFixed(1);
+        const halfShares = Math.floor(stock.shares / 2);
+        const halfProfit = (profitPerShare * halfShares).toFixed(2);
+
+        await sendMessage(
+          `🟢 <b>تنبيه هدف الربح!</b>\n\n` +
+          `📌 <b>${stock.symbol}</b> — ${stock.name||''}\n` +
+          `💰 السعر الحالي: <b>${price.toFixed(2)} ج.م</b>\n` +
+          `🎯 هدفك: ${stock.alertUp} ج.م\n` +
+          `📈 الربح: +${profitPct}% (+${totalProfit} ج.م)\n\n` +
+          `🤖 <b>خطة البيع المقترحة:</b>\n` +
+          `• بيع ${halfShares} سهم دلوقتي → تأمين +${halfProfit} ج.م ✅\n` +
+          `• احتفظ بـ ${stock.shares - halfShares} سهم للهدف التاني\n` +
+          `• وقف خسارة للباقي: ${(price * 0.95).toFixed(2)} ج.م\n\n` +
+          `📱 افتح ثاندر وقرر! <i>مساعد ثاندر RS</i>`
+        );
         alertsSent++;
       }
+
+      // تنبيه وقف الخسارة
       if (stock.alertDown && price <= stock.alertDown) {
-        await sendMessage(`🔴 <b>تنبيه نزول!</b>\n\n📌 <b>${stock.symbol}</b>\n💰 السعر: ${price.toFixed(2)} ج.م\n⚠️ تنبيهك: ${stock.alertDown} ج.م\n\n📱 <i>مساعد ثاندر RS</i>`);
+        const lossPerShare = (price - stock.buyPrice).toFixed(2);
+        const totalLoss = (Math.abs(lossPerShare) * stock.shares).toFixed(2);
+        const lossPct = ((price - stock.buyPrice) / stock.buyPrice * 100).toFixed(1);
+
+        await sendMessage(
+          `🔴 <b>تنبيه وقف الخسارة!</b>\n\n` +
+          `📌 <b>${stock.symbol}</b> — ${stock.name||''}\n` +
+          `💰 السعر الحالي: <b>${price.toFixed(2)} ج.م</b>\n` +
+          `⚠️ وقف خسارتك: ${stock.alertDown} ج.م\n` +
+          `📉 الخسارة: ${lossPct}% (-${totalLoss} ج.م)\n\n` +
+          `🤖 <b>نصيحة AI:</b>\n` +
+          `• لو الخسارة أكتر من 15% → فكر في البيع فوراً\n` +
+          `• لو السهم أساسياته كويسة → ممكن تصبر\n` +
+          `• القرار النهائي ليك أنت!\n\n` +
+          `📱 افتح ثاندر وقرر! <i>مساعد ثاندر RS</i>`
+        );
         alertsSent++;
       }
     }
