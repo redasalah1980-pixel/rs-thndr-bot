@@ -418,7 +418,7 @@ http.createServer((req, res) => {
 // ===== Start =====
 console.log('🚀 RS Thndr Bot Starting...');
 
-sendMessage('🚀 <b>مساعد ثاندر Bot شغال!</b>\n\nهيراقب محفظتك كل ساعة 📊\n\nاكتب /help لقائمة الأوامر\n\n📱 <i>RS Suite</i>').then(() => {
+sendMessage('🚀 <b>مساعد ثاندر Bot شغال!</b>\n\nهيراقب محفظتك كل ساعة 📊\n\nاكتب /help لقائمة الأوامر\n\n📱 <i>RS مساعد ثاندر</i>').then(() => {
   console.log('✅ Startup message sent');
 });
 
