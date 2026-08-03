@@ -213,13 +213,15 @@ async function handleCommand(text, chatId) {
     const count = await checkAlerts();
     await sendMessage(`✅ تم الفحص!\n${count > 0 ? `📨 تم إرسال ${count} تنبيه` : '🔕 مفيش تنبيهات دلوقتي'}`, chatId);
   } else if (text === '/summary') {
-    const summary = await getPortfolioSummary();
-    await sendMessage(summary, chatId);
+    const summary = await buildFullSummary();
+    await sendMessage('📊 <b>ملخص المحفظة والمراقبة</b>\n\n' + summary + '\n📱 <i>مساعد ثاندر RS</i>', chatId);
   } else if (text === '/status') {
     await sendMessage(
       `✅ <b>البوت شغال!</b>\n\n` +
-      `⏰ فحص كل ساعة\n` +
+      `⏰ فحص تنبيهات كل ساعة\n` +
       `🌅 ملخص صباحي الساعة 9 ص\n` +
+      `📊 ملخص إغلاق الساعة 2 ظ\n` +
+      `🌙 ملخص مسائي الساعة 9 م\n` +
       `🔥 Firebase: متصل\n\n` +
       `📱 <i>مساعد ثاندر RS</i>`, chatId
     );
@@ -250,13 +252,103 @@ async function pollUpdates() {
   }
 }
 
-// ===== Morning Summary =====
-async function checkMorning() {
+// ===== Build Full Summary =====
+async function buildFullSummary() {
+  const portfolio = await getFirebaseData('portfolio');
+  const watchlist = await getFirebaseData('watchlist');
+
+  let msg = '';
+
+  // المحفظة
+  if (portfolio && Object.keys(portfolio).length > 0) {
+    const stocks = Object.values(portfolio);
+    let totalCost = 0, totalValue = 0;
+    let stockLines = '';
+
+    for (const s of stocks) {
+      const cost = (s.buyPrice || 0) * (s.shares || 0);
+      const value = (s.currentPrice || s.buyPrice || 0) * (s.shares || 0);
+      const pnl = value - cost;
+      const pct = cost > 0 ? (pnl / cost * 100) : 0;
+      totalCost += cost;
+      totalValue += value;
+      const arrow = pnl >= 0 ? '📈' : '📉';
+      stockLines += `${arrow} <b>${s.symbol}</b> — ${(s.currentPrice || s.buyPrice).toFixed(2)} ج.م (${pnl >= 0 ? '+' : ''}${pct.toFixed(1)}%)\n`;
+    }
+
+    const totalPnl = totalValue - totalCost;
+    const totalPct = totalCost > 0 ? (totalPnl / totalCost * 100) : 0;
+
+    msg += `💼 <b>المحفظة (${stocks.length} أسهم):</b>\n`;
+    msg += stockLines;
+    msg += `\n💰 الإجمالي: ${totalValue.toFixed(0)} ج.م\n`;
+    msg += `${totalPnl >= 0 ? '✅' : '❌'} ربح/خسارة: ${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)} ج.م (${totalPct >= 0 ? '+' : ''}${totalPct.toFixed(1)}%)\n`;
+  } else {
+    msg += `💼 <b>المحفظة:</b> فاضية\n`;
+  }
+
+  // المراقبة
+  if (watchlist && Object.keys(watchlist).length > 0) {
+    const watches = Object.values(watchlist);
+    msg += `\n⭐ <b>المراقبة (${watches.length} أسهم):</b>\n`;
+    for (const w of watches) {
+      const diff = w.current && w.target ? ((w.current - w.target) / w.target * 100) : null;
+      const reached = w.current <= w.target;
+      const close = diff !== null && diff <= 10 && diff > 0;
+      const status = reached ? '🟢 وصل الهدف!' : close ? '🟡 قريب' : '⏳ بعيد';
+      msg += `${status} <b>${w.symbol}</b> — دلوقتي: ${(w.current || 0).toFixed(2)} / هدف: ${(w.target || 0).toFixed(2)} ج.م\n`;
+    }
+  } else {
+    msg += `\n⭐ <b>المراقبة:</b> فاضية\n`;
+  }
+
+  return msg;
+}
+
+// ===== Three Daily Summaries =====
+async function checkDailySummaries() {
   const now = new Date();
   const cairoHour = (now.getUTCHours() + 3) % 24;
-  if (cairoHour === 9 && now.getUTCMinutes() === 0) {
-    const summary = await getPortfolioSummary();
-    await sendMessage(`🌅 <b>صباح الخير يا Reda!</b>\n\n${summary}\n\n🕙 البورصة بتفتح الساعة 10 ص\n📱 <i>مساعد ثاندر RS</i>`);
+  const mins = now.getUTCMinutes();
+  if (mins !== 0) return;
+
+  // 9 ص — صباحي
+  if (cairoHour === 9) {
+    const summary = await buildFullSummary();
+    await sendMessage(
+      `🌅 <b>صباح الخير يا Reda!</b>\n\n` +
+      summary +
+      `\n🕙 البورصة بتفتح الساعة 10 الصبح\n` +
+      `💡 راجع أسهمك وكن مستعد!\n\n` +
+      `📱 <i>مساعد ثاندر RS</i>`
+    );
+    console.log('✅ Morning summary sent');
+  }
+
+  // 2:30 ظ — إغلاق البورصة
+  if (cairoHour === 14) {
+    const summary = await buildFullSummary();
+    await sendMessage(
+      `📊 <b>ملخص إغلاق البورصة!</b>\n\n` +
+      summary +
+      `\n🔒 البورصة أغلقت للنهارده\n` +
+      `💡 راجع أداء أسهمك وخطط لبكره!\n\n` +
+      `📱 <i>مساعد ثاندر RS</i>`
+    );
+    console.log('✅ Closing summary sent');
+  }
+
+  // 9 م — مسائي
+  if (cairoHour === 21) {
+    const summary = await buildFullSummary();
+    await sendMessage(
+      `🌙 <b>مساء الخير يا Reda!</b>\n\n` +
+      summary +
+      `\n💡 نصيحة المساء:\nراجع قراراتك وخطط لتحليلات بكره\n` +
+      `🕙 البورصة بتفتح بكره الساعة 10 ص\n\n` +
+      `📱 <i>مساعد ثاندر RS</i>`
+    );
+    console.log('✅ Evening summary sent');
   }
 }
 
@@ -279,7 +371,7 @@ pollUpdates();
 // Run checks every hour
 setInterval(checkAlerts, CHECK_INTERVAL);
 
-// Morning check every minute
-setInterval(checkMorning, 60000);
+// Daily summaries check every minute
+setInterval(checkDailySummaries, 60000);
 
 console.log('✅ Bot is running!');
