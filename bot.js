@@ -105,31 +105,52 @@ function updateFirebase(path, value) {
   });
 }
 
-// ===== Get Stock Price =====
+// ===== Get Stock Price from Twelve Data =====
+const TWELVE_DATA_KEY = 'de22aa3525b84767985c65db7b46b33d';
+
 function getStockPrice(symbol) {
   return new Promise((resolve) => {
-    const egSymbol = symbol + '.CA';
-    const options = {
-      hostname: 'query1.finance.yahoo.com',
-      path: `/v8/finance/chart/${egSymbol}?interval=1d&range=1d`,
-      method: 'GET',
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-      timeout: 10000
-    };
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          const json = JSON.parse(data);
-          const price = json?.chart?.result?.[0]?.meta?.regularMarketPrice;
-          resolve(price || null);
-        } catch { resolve(null); }
+    // جرب XCAI أولاً (رمز البورصة المصرية في Twelve Data)
+    const tryExchange = (exchange) => {
+      return new Promise((res) => {
+        const path = `/price?symbol=${symbol}&exchange=${exchange}&apikey=${TWELVE_DATA_KEY}`;
+        const options = {
+          hostname: 'api.twelvedata.com',
+          path: path,
+          method: 'GET',
+          timeout: 10000
+        };
+        const req = https.request(options, (response) => {
+          let data = '';
+          response.on('data', chunk => data += chunk);
+          response.on('end', () => {
+            try {
+              const json = JSON.parse(data);
+              const price = json?.price ? parseFloat(json.price) : null;
+              if (price && price > 0 && !isNaN(price)) {
+                console.log(`✅ ${symbol}@${exchange}: ${price} ج.م`);
+                res(price);
+              } else {
+                res(null);
+              }
+            } catch(e) { res(null); }
+          });
+        });
+        req.on('error', () => res(null));
+        req.on('timeout', () => { req.destroy(); res(null); });
+        req.end();
       });
-    });
-    req.on('error', () => resolve(null));
-    req.on('timeout', () => { req.destroy(); resolve(null); });
-    req.end();
+    };
+
+    // جرب XCAI ثم EGX
+    tryExchange('XCAI').then(price => {
+      if (price) { resolve(price); return; }
+      return tryExchange('EGX');
+    }).then(price => {
+      if (price) { resolve(price); return; }
+      console.log(`⚠️ ${symbol}: لم يتم الحصول على السعر من Twelve Data`);
+      resolve(null);
+    }).catch(() => resolve(null));
   });
 }
 
