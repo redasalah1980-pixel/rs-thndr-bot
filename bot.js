@@ -359,10 +359,19 @@ async function buildFullSummary() {
     const watches = Object.values(watchlist);
     msg += `\n⭐ <b>المراقبة (${watches.length} أسهم):</b>\n`;
     for (const w of watches) {
-      const reached = w.current <= w.target;
-      const close = w.current && w.target && ((w.current - w.target) / w.target * 100) <= 10 && !reached;
-      const status = reached ? '🟢 وصل!' : close ? '🟡 قريب' : '⏳';
-      msg += `${status} <b>${w.symbol}</b> — دلوقتي: ${(w.current||0).toFixed(2)} / هدف: ${(w.target||0).toFixed(2)} ج.م\n`;
+      const current = w.current || 0;
+      const target = w.target || 0;
+      const reached = current <= target;
+      const diff = target > 0 ? ((current - target) / target * 100) : 0;
+      const close = diff <= 10 && diff > 0;
+
+      let status = reached ? '🟢' : close ? '🟡' : '⏳';
+      let statusText = reached ? 'وصل الهدف!' : close ? 'قريب جداً!' : 'لسه بعيد';
+
+      msg += `${status} <b>${w.symbol}</b>${w.name ? ' — ' + w.name : ''}\n`;
+      msg += `   💰 دلوقتي: <b>${current.toFixed(2)} ج.م</b>\n`;
+      msg += `   🎯 هدفك: ${target.toFixed(2)} ج.م\n`;
+      msg += `   📊 ${statusText} (${diff >= 0 ? '+' : ''}${diff.toFixed(1)}%)\n`;
     }
   }
 
