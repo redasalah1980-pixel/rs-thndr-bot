@@ -491,15 +491,20 @@ async function handleCommand(text, chatId) {
       for (const w of Object.values(watchlist)) {
         if (!w.symbol) continue;
         hasAny = true;
-        let livePrice = await getStockPrice(w.symbol);
-        const currentPrice = livePrice || w.current || 0;
-        const diff = w.target > 0 ? ((currentPrice - w.target) / w.target * 100) : 0;
-        const source = livePrice ? '📡' : '💾';
+        let livePrice = null;
+        try { livePrice = await getStockPrice(w.symbol); } catch(e) {}
+        // استخدم السعر المحفوظ لو Twelve Data مش شغال
+        const currentPrice = (livePrice && livePrice > 0) ? livePrice : (w.current || 0);
+        const source = (livePrice && livePrice > 0) ? '📡' : '💾';
+        const diff = w.target > 0 && currentPrice > 0 ? ((currentPrice - w.target) / w.target * 100) : null;
+        const status = diff === null ? '⏳' : diff <= 0 ? '🟢' : diff <= 10 ? '🟡' : '⏳';
+        const statusText = diff === null ? 'سعر غير محدث' : diff <= 0 ? 'وصل الهدف! ✅' : diff <= 10 ? 'قريب جداً!' : 'لسه بعيد';
 
-        msg += `${diff <= 0 ? '🟢' : diff <= 10 ? '🟡' : '⏳'} <b>${w.symbol}</b> ${source}\n`;
-        msg += `   💰 دلوقتي: ${currentPrice.toFixed(2)} ج.م\n`;
-        msg += `   🎯 هدفك: ${w.target.toFixed(2)} ج.م\n`;
-        msg += `   📊 ${diff <= 0 ? 'وصل الهدف! ✅' : diff <= 10 ? 'قريب جداً!' : 'لسه بعيد'} (${diff>=0?'+':''}${diff.toFixed(1)}%)\n\n`;
+        msg += `${status} <b>${w.symbol}</b>${w.name ? ' — ' + w.name : ''} ${source}\n`;
+        msg += currentPrice > 0 ? `   💰 دلوقتي: ${currentPrice.toFixed(2)} ج.م\n` : `   💰 السعر: غير محدث\n`;
+        msg += `   🎯 هدفك: ${(w.target||0).toFixed(2)} ج.م\n`;
+        if (diff !== null) msg += `   📊 ${statusText} (${diff>=0?'+':''}${diff.toFixed(1)}%)\n`;
+        msg += '\n';
       }
     }
 
