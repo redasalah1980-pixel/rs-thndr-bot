@@ -379,9 +379,25 @@ async function handleCommand(text, chatId) {
       await sendMessage('⚠️ مثال: /analyze ADIB', chatId);
     } else {
       await sendMessage(`🔍 جاري تحليل <b>${symbol}</b>...`, chatId);
-      const price = await getStockPrice(symbol);
+      let price = null;
+      try {
+        price = await getStockPrice(symbol);
+        console.log(`/analyze ${symbol}: price=${price}`);
+      } catch(e) {
+        console.error(`/analyze error: ${e.message}`);
+      }
+
       if (!price) {
-        await sendMessage(`❌ مش قادر أجيب سعر ${symbol}\nتأكد من الرمز وجرب تاني`, chatId);
+        // جرب بدون exchange
+        await sendMessage(
+          `⚠️ <b>${symbol}</b>\n\n` +
+          `مش قادر أجيب السعر من Twelve Data دلوقتي\n\n` +
+          `الأسباب المحتملة:\n` +
+          `• الرمز مش موجود في EGX\n` +
+          `• البورصة مغلقة دلوقتي\n` +
+          `• مشكلة مؤقتة في الاتصال\n\n` +
+          `💡 تأكد من الرمز وجرب: /analyze ADIB`, chatId
+        );
       } else {
         const watchlist = await getFirebaseData('watchlist');
         const portfolio = await getFirebaseData('portfolio');
@@ -406,9 +422,9 @@ async function handleCommand(text, chatId) {
         await sendMessage(
           `📊 <b>تحليل ${symbol}</b>\n\n` +
           `💰 السعر الحالي: <b>${price.toFixed(2)} ج.م</b>\n` +
-          `📡 المصدر: Twelve Data (تأخير 15 دقيقة)` +
+          `📡 Twelve Data (تأخير 15 دقيقة)` +
           extra +
-          `\n💡 للتحليل الكامل مع AI → افتح الأداة\n\n` +
+          `\n\n💡 للتحليل الكامل مع AI → افتح الأداة\n\n` +
           `📱 <i>RS مساعد ثاندر</i>`, chatId
         );
       }
