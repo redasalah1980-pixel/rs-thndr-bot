@@ -608,28 +608,53 @@ async function pollUpdates() {
 }
 
 // ===== Claude API =====
-async function callClaude(prompt) {
-  if (!CLAUDE_API_KEY) return 'مفيش API Key';
-  try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+function callClaude(prompt) {
+  return new Promise((resolve) => {
+    if (!CLAUDE_API_KEY) { resolve('مفيش API Key'); return; }
+    const body = JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 600,
+      messages: [{ role: 'user', content: prompt }]
+    });
+    const bodyBuffer = Buffer.from(body, 'utf8');
+    const options = {
+      hostname: 'api.anthropic.com',
+      path: '/v1/messages',
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': CLAUDE_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 800,
-        messages: [{ role: 'user', content: prompt }]
-      })
+        'anthropic-version': '2023-06-01',
+        'Content-Length': bodyBuffer.length
+      }
+    };
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          console.log('Claude response status:', res.statusCode);
+          const json = JSON.parse(data);
+          if (json.error) {
+            console.error('Claude error:', json.error);
+            resolve('خطأ: ' + (json.error.message || 'مش قادر أحلل'));
+            return;
+          }
+          const text = json?.content?.[0]?.text || 'مش قادر أحلل دلوقتي';
+          resolve(text);
+        } catch(e) {
+          console.error('Claude parse error:', e.message, 'data:', data.slice(0,200));
+          resolve('خطأ في التحليل');
+        }
+      });
     });
-    const data = await response.json();
-    return data?.content?.[0]?.text || 'مش قادر أحلل دلوقتي';
-  } catch(e) {
-    console.error('Claude API error:', e.message);
-    return 'خطأ في الاتصال بـ Claude API';
-  }
+    req.on('error', (e) => {
+      console.error('Claude request error:', e.message);
+      resolve('خطأ في الاتصال: ' + e.message);
+    });
+    req.write(bodyBuffer);
+    req.end();
+  });
 }
 
 // ===== AI Suggestions =====
