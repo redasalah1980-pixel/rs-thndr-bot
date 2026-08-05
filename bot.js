@@ -608,42 +608,28 @@ async function pollUpdates() {
 }
 
 // ===== Claude API =====
-function callClaude(prompt) {
-  return new Promise((resolve) => {
-    if (!CLAUDE_API_KEY) { resolve('مفيش API Key'); return; }
-    const body = JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 800,
-      messages: [{ role: 'user', content: prompt }]
-    });
-    const options = {
-      hostname: 'api.anthropic.com',
-      path: '/v1/messages',
+async function callClaude(prompt) {
+  if (!CLAUDE_API_KEY) return 'مفيش API Key';
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': CLAUDE_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'Content-Length': Buffer.byteLength(body)
+        'anthropic-version': '2023-06-01'
       },
-      timeout: 30000
-    };
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          const json = JSON.parse(data);
-          const text = json?.content?.[0]?.text || 'مش قادر أحلل دلوقتي';
-          resolve(text);
-        } catch(e) { resolve('خطأ في التحليل'); }
-      });
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 800,
+        messages: [{ role: 'user', content: prompt }]
+      })
     });
-    req.on('error', () => resolve('خطأ في الاتصال'));
-    req.on('timeout', () => { req.destroy(); resolve('انتهى الوقت'); });
-    req.write(body);
-    req.end();
-  });
+    const data = await response.json();
+    return data?.content?.[0]?.text || 'مش قادر أحلل دلوقتي';
+  } catch(e) {
+    console.error('Claude API error:', e.message);
+    return 'خطأ في الاتصال بـ Claude API';
+  }
 }
 
 // ===== AI Suggestions =====
