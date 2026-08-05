@@ -292,10 +292,12 @@ async function handleCommand(text, chatId) {
       `/summary — ملخص المحفظة والمراقبة\n` +
       `/portfolio — تفاصيل المحفظة\n` +
       `/myanalyze — تحليل كل أسهمك\n` +
-      `/suggest — 🤖 AI يوصي لكل سهم عندك\n` +
+      `/suggest — 🤖 AI يوصي لكل سهم\n` +
+      `/market — 📊 تحليل السوق المصري\n` +
+      `/week — 📅 التقرير الأسبوعي\n` +
+      `/learn — 📚 مصطلح استثماري جديد\n` +
       `/gold — وضع الذهب بتاعك\n` +
       `/dollar — سعر الدولار دلوقتي\n` +
-      `/market — 📊 تحليل السوق المصري اليوم\n` +
       `/analyze ADIB — تحليل سهم معين\n` +
       `/status — حالة البوت\n` +
       `/help — قائمة الأوامر\n\n` +
@@ -561,6 +563,12 @@ async function handleCommand(text, chatId) {
       msg += `📱 <i>RS مساعد ثاندر</i>`;
       await sendMessage(msg, chatId);
     }
+
+  } else if (text === '/week') {
+    await sendWeeklyReport();
+
+  } else if (text === '/learn') {
+    await sendDailyLesson();
 
   } else if (text === '/dollar') {
     await sendMessage('💵 جاري جلب سعر الدولار...', chatId);
@@ -902,6 +910,7 @@ async function buildFullSummary() {
 async function checkDailySummaries() {
   const now = new Date();
   const cairoHour = (now.getUTCHours() + 3) % 24;
+  const cairoDow = (now.getUTCDay() + 1) % 7; // 0=أحد
   const mins = now.getUTCMinutes();
   if (mins !== 0) return;
 
@@ -913,7 +922,7 @@ async function checkDailySummaries() {
       summary +
       `\n🕙 البورصة بتفتح الساعة 10 الصبح\n` +
       `💡 راجع أسهمك وكن مستعد!\n\n` +
-      `📱 <i>مساعد ثاندر RS</i>`
+      `📱 <i>RS مساعد ثاندر</i>`
     );
     console.log('✅ Morning summary sent');
   }
@@ -925,7 +934,8 @@ async function checkDailySummaries() {
       await sendMessage(
         `📊 <b>تحليل السوق المصري — افتتاح اليوم</b>\n\n` +
         analysis +
-        `\n\n📱 <i>RS مساعد ثاندر</i>`
+        `\n\n⚠️ <i>استرشادي للتعلم — ليس توصية رسمية</i>\n` +
+        `📱 <i>RS مساعد ثاندر</i>`
       );
       console.log('✅ Market analysis sent');
     } catch(e) { console.log('Market analysis error:', e.message); }
@@ -939,7 +949,7 @@ async function checkDailySummaries() {
       summary +
       `\n🔒 البورصة أغلقت للنهارده\n` +
       `💡 راجع أداء أسهمك وخطط لبكره!\n\n` +
-      `📱 <i>مساعد ثاندر RS</i>`
+      `📱 <i>RS مساعد ثاندر</i>`
     );
     console.log('✅ Closing summary sent');
   }
@@ -963,9 +973,95 @@ async function checkDailySummaries() {
     );
     console.log('✅ Evening summary sent');
   }
+
+  // الجمعة 6 م — تقرير أسبوعي
+  if (cairoHour === 18 && cairoDow === 5) {
+    await sendWeeklyReport();
+  }
+
+  // الاثنين 9 ص — تذكير تحديث الذهب
+  if (cairoHour === 9 && cairoDow === 1) {
+    const goldData = await getFirebaseData('gold_portfolio');
+    if (goldData && goldData.grams) {
+      await sendMessage(
+        `🥇 <b>تذكير أسبوعي — حدّث سعر الذهب</b>\n\n` +
+        `افتح ثاندر → Thndr Gold → شوف السعر الحالي\n` +
+        `بعدين افتح الأداة → محفظتي → 🥇 ذهب → حدّث\n\n` +
+        `⚖️ عندك ${goldData.grams} جرام\n` +
+        `📱 <i>RS مساعد ثاندر</i>`
+      );
+    }
+  }
+
+  // مصطلح استثماري يومي الساعة 8 ص
+  if (cairoHour === 8 && CLAUDE_API_KEY) {
+    await sendDailyLesson();
+  }
 }
 
-// ===== Keepalive =====
+// ===== Weekly Report =====
+async function sendWeeklyReport() {
+  const portfolio = await getFirebaseData('portfolio');
+  const goldData = await getFirebaseData('gold_portfolio');
+
+  let msg = `📅 <b>التقرير الأسبوعي — جمعة مباركة يا Reda!</b>\n\n`;
+
+  if (portfolio && Object.keys(portfolio).length > 0) {
+    const stocks = Object.values(portfolio);
+    let totalCost = 0, totalValue = 0;
+    stocks.forEach(s => {
+      totalCost += (s.buyPrice||0) * (s.shares||0);
+      totalValue += (s.currentPrice||s.buyPrice||0) * (s.shares||0);
+    });
+    const pnl = totalValue - totalCost;
+    const pct = totalCost > 0 ? (pnl/totalCost*100) : 0;
+    msg += `💼 <b>أداء المحفظة هذا الأسبوع:</b>\n`;
+    msg += `💰 القيمة: ${totalValue.toFixed(0)} ج.م\n`;
+    msg += `${pnl>=0?'✅':'❌'} الربح/الخسارة: ${pnl>=0?'+':''}${pnl.toFixed(2)} ج.م (${pct>=0?'+':''}${pct.toFixed(1)}%)\n\n`;
+  }
+
+  if (goldData && goldData.grams) {
+    const goldPnl = (goldData.currentPrice - goldData.buyPrice) * goldData.grams;
+    const goldPct = goldData.buyPrice > 0 ? (goldPnl/goldData.buyPrice/goldData.grams*100) : 0;
+    msg += `🥇 <b>الذهب:</b>\n`;
+    msg += `${goldPnl>=0?'✅':'❌'} ${goldPnl>=0?'+':''}${goldPnl.toFixed(2)} ج.م\n\n`;
+  }
+
+  msg += `💡 <b>سؤال للتأمل:</b>\n`;
+  msg += `هل قراراتك الأسبوع ده كانت صح؟\n`;
+  msg += `افتح اليوميات في الأداة وراجع\n\n`;
+  msg += `📱 <i>RS مساعد ثاندر</i>`;
+
+  await sendMessage(msg);
+  console.log('✅ Weekly report sent');
+}
+
+// ===== Daily Investment Lesson =====
+const LESSONS = [
+  { term: 'P/E نسبة السعر للربح', def: 'سعر السهم ÷ ربح السهم السنوي\nأقل من 10 = رخيص | 10-20 = عادل | أكتر من 20 = غالي\n💡 مثال: ADIB بـ P/E = 6 يعني رخيص نسبياً' },
+  { term: 'DCA الشراء المتدرج', def: 'بدل ما تشتري بكل مبلغك دفعة واحدة — قسّمه على فترات\n💡 مثال: 500 ج.م تشتري بيهم على 3 أسابيع بدل مرة واحدة\n✅ الفايدة: بتقلل مخاطرة الشراء في قمة السعر' },
+  { term: 'وقف الخسارة Stop Loss', def: 'سعر محدد تبيع عنده لو السهم نزل لحماية رأس مالك\n💡 القاعدة: 10-15% تحت سعر الشراء\n⚠️ مثال: اشتريت بـ 50 → وقف الخسارة عند 42-45' },
+  { term: 'T+0 و T+2', def: 'T = يوم الصفقة\nT+0: تقدر تبيع نفس اليوم\nT+2: التسوية الكاملة بعد يومين\n💡 في ثاندر: اشتريت النهارده تبيع بكره (T+1)' },
+  { term: 'حجم التداول Volume', def: 'عدد الأسهم اللي اتباعت في اليوم\n💡 حجم عالي = اهتمام كبير بالسهم\n⚠️ سعر بيطلع مع حجم منخفض = صعود غير موثوق' },
+  { term: 'الأرباح الموزعة Dividend', def: 'جزء من أرباح الشركة بتوزعه على المساهمين\nالعائد التوزيعي = الأرباح ÷ السعر × 100\n💡 سهم بـ 50 ج.م يوزع 3 ج.م = عائد 6%' },
+  { term: 'EPS العائد على السهم', def: 'صافي الربح ÷ عدد الأسهم\nكل سهم عنده بيكسب كام جنيه في السنة\n💡 EPS مرتفع ومتزايد = الشركة بتنمو ✅' },
+  { term: 'التنويع Diversification', def: 'توزيع استثمارك على أسهم وقطاعات مختلفة\n✅ 3-5 أسهم في قطاعات مختلفة أحسن من سهم واحد\n💡 لو قطاع نزل — الباقي بيعوض' },
+  { term: 'التحليل الفني vs الأساسي', def: 'الأساسي: يدرس الشركة — أرباحها ومستقبلها\nالفني: يدرس الشارت والأسعار التاريخية\n💡 الأفضل: الاتنين مع بعض' },
+  { term: 'العائد الحقيقي Total Return', def: 'ارتفاع السعر + الأرباح الموزعة مع بعض\n💡 مثال: سهم طلع +15% + وزع 5% = عائد حقيقي 20%\n✅ دايما احسب الاتنين مع بعض' },
+];
+
+let lessonIndex = 0;
+async function sendDailyLesson() {
+  const lesson = LESSONS[lessonIndex % LESSONS.length];
+  lessonIndex++;
+  await sendMessage(
+    `📚 <b>مصطلح اليوم:</b>\n\n` +
+    `🔑 <b>${lesson.term}</b>\n\n` +
+    `${lesson.def}\n\n` +
+    `📱 <i>RS مساعد ثاندر</i>`
+  );
+  console.log('✅ Daily lesson sent');
+}
 http.createServer((req, res) => {
   res.writeHead(200);
   res.end('RS Thndr Bot 🚀');
