@@ -381,7 +381,8 @@ async function handleCommand(text, chatId) {
       await sendMessage(
         `📊 <b>تحليل السوق المصري اليوم</b>\n\n` +
         analysis +
-        `\n\n📱 <i>RS مساعد ثاندر</i>`, chatId
+        `\n\n⚠️ <i>استرشادي فقط — ليس توصية مالية رسمية</i>\n` +
+        `📱 <i>RS مساعد ثاندر</i>`, chatId
       );
     }
 
@@ -714,12 +715,13 @@ ${watchText || 'فاضية'}
   return await callClaude(prompt);
 }
 // ===== Claude API with Web Search =====
-function callClaudeWithSearch(prompt) {
+function callClaudeWithSearch(prompt, maxTokens) {
+  maxTokens = maxTokens || 1000;
   return new Promise((resolve) => {
     if (!CLAUDE_API_KEY) { resolve('مفيش API Key'); return; }
     const body = JSON.stringify({
       model: 'claude-sonnet-4-6',
-      max_tokens: 1000,
+      max_tokens: maxTokens,
       tools: [{ type: 'web_search_20250305', name: 'web_search' }],
       messages: [{ role: 'user', content: prompt }]
     });
@@ -756,34 +758,41 @@ function callClaudeWithSearch(prompt) {
 
 // ===== Daily Market Analysis =====
 async function getDailyMarketAnalysis() {
-  const prompt = `أنت محلل مالي متخصص في البورصة المصرية.
+  const prompt = `أنت محلل مالي متخصص في البورصة المصرية EGX.
 
-ابحث في الإنترنت عن:
-1. أداء مؤشر EGX30 اليوم أو آخر جلسة
-2. أهم أخبار البورصة المصرية اليوم
-3. أقوى القطاعات وأضعفها
-4. أسهم لافتة للنظر (ارتفاعات أو انخفاضات كبيرة)
-5. أي أحداث اقتصادية مؤثرة
+ابحث في الإنترنت الآن عن:
+1. أداء مؤشر EGX30 آخر جلسة تداول
+2. أهم خبر اقتصادي مصري اليوم
+3. القطاعات الأقوى والأضعف
+4. أسهم ارتفعت أو انخفضت بشكل لافت
 
-قدم تقرير مختصر باللغة العربية:
+ثم قدم التقرير التالي كاملاً باللغة العربية بدون اختصار:
 
-📊 مؤشر EGX30:
-[الأداء العام]
+📊 <b>EGX30:</b>
+[أداء المؤشر بالأرقام]
 
-📰 أهم خبر:
-[الخبر الأهم المؤثر على السوق]
+📰 <b>أهم خبر اليوم:</b>
+[الخبر + تأثيره على السوق]
 
-💪 أقوى قطاع: [القطاع والسبب]
-⚠️ أضعف قطاع: [القطاع والسبب]
+💪 <b>أقوى قطاع:</b> [اسم القطاع] — [السبب]
+⚠️ <b>أضعف قطاع:</b> [اسم القطاع] — [السبب]
 
-🔍 أسهم لافتة:
-[2-3 أسهم مثيرة للاهتمام مع السبب]
+🔍 <b>أسهم لافتة للنظر:</b>
+• [سهم 1]: [السعر] — [السبب]
+• [سهم 2]: [السعر] — [السبب]
+• [سهم 3]: [السعر] — [السبب]
 
-💡 توصية اليوم:
-[نصيحة استثمارية مختصرة]
+🎯 <b>فرص محتملة للشراء:</b>
+• [سهم]: [السبب باختصار]
+• [سهم]: [السبب باختصار]
 
-⚠️ استرشادي فقط — ليس توصية مالية رسمية`;
-  return await callClaudeWithSearch(prompt);
+⚡ <b>تحذيرات:</b>
+• [أي مخاطر أو أسهم يجب تجنبها اليوم]
+
+💡 <b>توصية اليوم:</b>
+[نصيحة استثمارية مختصرة وعملية]`;
+
+  return await callClaudeWithSearch(prompt, 1500);
 }
 
 async function getUSDRate() {
