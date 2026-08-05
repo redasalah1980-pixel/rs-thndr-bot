@@ -6,6 +6,7 @@ const BOT_TOKEN = '8984910077:AAETlpDzQm7jVFbuBoDD0zpcrzDWxcv9gdA';
 const CHAT_ID = '344402775';
 const FIREBASE_URL = 'https://rs-thndr-assistant-default-rtdb.europe-west1.firebasedatabase.app';
 const CHECK_INTERVAL = 60 * 60 * 1000;
+const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY || '';
 
 // ===== Send Telegram Message =====
 function sendMessage(text, chatId) {
@@ -290,7 +291,8 @@ async function handleCommand(text, chatId) {
       `/check — فحص التنبيهات دلوقتي\n` +
       `/summary — ملخص المحفظة والمراقبة\n` +
       `/portfolio — تفاصيل المحفظة\n` +
-      `/myanalyze — تحليل كل أسهمك دفعة واحدة\n` +
+      `/myanalyze — تحليل كل أسهمك\n` +
+      `/suggest — 🤖 AI يوصي لكل سهم عندك\n` +
       `/gold — وضع الذهب بتاعك\n` +
       `/dollar — سعر الدولار دلوقتي\n` +
       `/market — حالة السوق المصري\n` +
@@ -455,6 +457,25 @@ async function handleCommand(text, chatId) {
       }
     }
 
+  } else if (text === '/suggest') {
+    if (!CLAUDE_API_KEY) {
+      await sendMessage(
+        `⚠️ <b>محتاج Claude API Key</b>\n\n` +
+        `أضف الـ Key في Railway:\n` +
+        `Settings → Variables → CLAUDE_API_KEY\n\n` +
+        `📱 <i>RS مساعد ثاندر</i>`, chatId
+      );
+    } else {
+      await sendMessage('🤖 AI بيحلل محفظتك ويجهز التوصيات...', chatId);
+      const suggestions = await getAISuggestions();
+      await sendMessage(
+        `💡 <b>توصيات AI لمحفظتك:</b>\n\n` +
+        suggestions +
+        `\n\n⚠️ هذه توصيات استرشادية — القرار النهائي ليك أنت\n\n` +
+        `📱 <i>RS مساعد ثاندر</i>`, chatId
+      );
+    }
+
   } else if (text === '/myanalyze') {
     await sendMessage('🔍 جاري تحليل كل أسهمك...', chatId);
 
@@ -586,7 +607,92 @@ async function pollUpdates() {
   }
 }
 
-// ===== Get USD/EGP Rate =====
+// ===== Claude API =====
+function callClaude(prompt) {
+  return new Promise((resolve) => {
+    if (!CLAUDE_API_KEY) { resolve('مفيش API Key'); return; }
+    const body = JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 800,
+      messages: [{ role: 'user', content: prompt }]
+    });
+    const options = {
+      hostname: 'api.anthropic.com',
+      path: '/v1/messages',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': CLAUDE_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'Content-Length': Buffer.byteLength(body)
+      },
+      timeout: 30000
+    };
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          const text = json?.content?.[0]?.text || 'مش قادر أحلل دلوقتي';
+          resolve(text);
+        } catch(e) { resolve('خطأ في التحليل'); }
+      });
+    });
+    req.on('error', () => resolve('خطأ في الاتصال'));
+    req.on('timeout', () => { req.destroy(); resolve('انتهى الوقت'); });
+    req.write(body);
+    req.end();
+  });
+}
+
+// ===== AI Suggestions =====
+async function getAISuggestions() {
+  const portfolio = await getFirebaseData('portfolio');
+  const watchlist = await getFirebaseData('watchlist');
+
+  if ((!portfolio || Object.keys(portfolio).length === 0) &&
+      (!watchlist || Object.keys(watchlist).length === 0)) {
+    return 'مفيش أسهم في محفظتك أو مراقبتك دلوقتي';
+  }
+
+  let portfolioText = '';
+  if (portfolio && Object.keys(portfolio).length > 0) {
+    portfolioText = Object.values(portfolio).map(s => {
+      const pnl = ((s.currentPrice||s.buyPrice) - s.buyPrice) / s.buyPrice * 100;
+      return `${s.symbol}: شراء ${s.buyPrice} | دلوقتي ${(s.currentPrice||s.buyPrice).toFixed(2)} | ${pnl>=0?'+':''}${pnl.toFixed(1)}% | هدف: ${s.alertUp||'—'} | وقف: ${s.alertDown||'—'}`;
+    }).join('\n');
+  }
+
+  let watchText = '';
+  if (watchlist && Object.keys(watchlist).length > 0) {
+    watchText = Object.values(watchlist).map(w => {
+      const diff = w.target > 0 ? ((w.current-w.target)/w.target*100).toFixed(1) : '—';
+      return `${w.symbol}: هدف شراء ${w.target} | دلوقتي ${(w.current||0).toFixed(2)} | ${diff}%`;
+    }).join('\n');
+  }
+
+  const prompt = `أنت مستشار استثماري متخصص في البورصة المصرية.
+
+محفظة المستثمر:
+${portfolioText || 'فاضية'}
+
+أسهم المراقبة:
+${watchText || 'فاضية'}
+
+بناءً على هذه البيانات، قدم توصيات مختصرة وعملية باللغة العربية:
+
+لكل سهم في المحفظة:
+🔴 بيع / 🟡 احتفظ / 🟢 زيد — والسبب في جملة واحدة
+
+لكل سهم في المراقبة:
+✅ اشتري دلوقتي / ⏳ استنى / ❌ تجنب — والسبب في جملة واحدة
+
+في النهاية: نصيحة عامة واحدة للمحفظة كلها.
+اجعل ردك مختصراً ومباشراً.`;
+
+  return await callClaude(prompt);
+}
 async function getUSDRate() {
   return new Promise((resolve) => {
     const options = {
@@ -718,15 +824,22 @@ async function checkDailySummaries() {
     console.log('✅ Closing summary sent');
   }
 
-  // 9 م — مسائي
+  // 9 م — مسائي + توصية AI
   if (cairoHour === 21) {
     const summary = await buildFullSummary();
+    let aiTip = '';
+    if (CLAUDE_API_KEY) {
+      try {
+        const suggestions = await getAISuggestions();
+        aiTip = `\n\n💡 <b>توصية AI المسائية:</b>\n${suggestions}`;
+      } catch(e) { console.log('AI suggest error:', e.message); }
+    }
     await sendMessage(
       `🌙 <b>مساء الخير يا Reda!</b>\n\n` +
       summary +
-      `\n💡 نصيحة المساء:\nراجع قراراتك وخطط لتحليلات بكره\n` +
-      `🕙 البورصة بتفتح بكره الساعة 10 ص\n\n` +
-      `📱 <i>مساعد ثاندر RS</i>`
+      aiTip +
+      `\n\n🕙 البورصة بتفتح بكره 10 ص\n\n` +
+      `📱 <i>RS مساعد ثاندر</i>`
     );
     console.log('✅ Evening summary sent');
   }
