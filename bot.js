@@ -295,7 +295,7 @@ async function handleCommand(text, chatId) {
       `/suggest — 🤖 AI يوصي لكل سهم عندك\n` +
       `/gold — وضع الذهب بتاعك\n` +
       `/dollar — سعر الدولار دلوقتي\n` +
-      `/market — حالة السوق المصري\n` +
+      `/market — 📊 تحليل السوق المصري اليوم\n` +
       `/analyze ADIB — تحليل سهم معين\n` +
       `/status — حالة البوت\n` +
       `/help — قائمة الأوامر\n\n` +
@@ -360,21 +360,30 @@ async function handleCommand(text, chatId) {
       );
     }
 
-  } else if (text === '/market') {
-    const now = new Date();
-    const cairoHour = (now.getUTCHours() + 3) % 24;
-    const day = now.getDay();
-    const isWeekday = day >= 0 && day <= 4;
-    const isOpen = isWeekday && cairoHour >= 10 && cairoHour < 14.5;
-    await sendMessage(
-      `📊 <b>حالة السوق المصري:</b>\n\n` +
-      `${isOpen ? '🟢 البورصة مفتوحة دلوقتي' : '🔴 البورصة مغلقة'}\n\n` +
-      `🕙 أوقات التداول: 10 ص — 2:30 م\n` +
-      `📅 أيام العمل: الأحد — الخميس\n\n` +
-      `${!isOpen && isWeekday && cairoHour < 10 ? `⏰ بيفتح بعد ${(10-cairoHour).toFixed(0)} ساعة تقريباً\n\n` : ''}` +
-      `💡 للأسعار اللحظية افتح ثاندر\n\n` +
-      `📱 <i>RS مساعد ثاندر</i>`, chatId
-    );
+  } else if (text === '/market' || text === '/market_analysis') {
+    await sendMessage('📊 جاري تحليل السوق المصري...', chatId);
+    if (!CLAUDE_API_KEY) {
+      const now = new Date();
+      const cairoHour = (now.getUTCHours() + 3) % 24;
+      const day = now.getDay();
+      const isWeekday = day >= 0 && day <= 4;
+      const isOpen = isWeekday && cairoHour >= 10 && cairoHour < 14.5;
+      await sendMessage(
+        `📊 <b>حالة السوق المصري:</b>\n\n` +
+        `${isOpen ? '🟢 البورصة مفتوحة دلوقتي' : '🔴 البورصة مغلقة'}\n\n` +
+        `🕙 أوقات التداول: 10 ص — 2:30 م\n` +
+        `📅 أيام العمل: الأحد — الخميس\n\n` +
+        `💡 للتحليل الكامل أضف CLAUDE_API_KEY\n\n` +
+        `📱 <i>RS مساعد ثاندر</i>`, chatId
+      );
+    } else {
+      const analysis = await getDailyMarketAnalysis();
+      await sendMessage(
+        `📊 <b>تحليل السوق المصري اليوم</b>\n\n` +
+        analysis +
+        `\n\n📱 <i>RS مساعد ثاندر</i>`, chatId
+      );
+    }
 
   } else if (text && (text === '/analyze' || text.startsWith('/analyze '))) {
     const parts = text.split(' ');
@@ -704,6 +713,79 @@ ${watchText || 'فاضية'}
 
   return await callClaude(prompt);
 }
+// ===== Claude API with Web Search =====
+function callClaudeWithSearch(prompt) {
+  return new Promise((resolve) => {
+    if (!CLAUDE_API_KEY) { resolve('مفيش API Key'); return; }
+    const body = JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1000,
+      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+      messages: [{ role: 'user', content: prompt }]
+    });
+    const bodyBuffer = Buffer.from(body, 'utf8');
+    const options = {
+      hostname: 'api.anthropic.com',
+      path: '/v1/messages',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': CLAUDE_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'Content-Length': bodyBuffer.length
+      }
+    };
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          if (json.error) { resolve('خطأ: ' + json.error.message); return; }
+          let text = '';
+          if (json.content) json.content.forEach(b => { if (b.type === 'text') text += b.text; });
+          resolve(text || 'مش قادر أحلل دلوقتي');
+        } catch(e) { resolve('خطأ في التحليل'); }
+      });
+    });
+    req.on('error', (e) => { resolve('خطأ: ' + e.message); });
+    req.write(bodyBuffer);
+    req.end();
+  });
+}
+
+// ===== Daily Market Analysis =====
+async function getDailyMarketAnalysis() {
+  const prompt = `أنت محلل مالي متخصص في البورصة المصرية.
+
+ابحث في الإنترنت عن:
+1. أداء مؤشر EGX30 اليوم أو آخر جلسة
+2. أهم أخبار البورصة المصرية اليوم
+3. أقوى القطاعات وأضعفها
+4. أسهم لافتة للنظر (ارتفاعات أو انخفاضات كبيرة)
+5. أي أحداث اقتصادية مؤثرة
+
+قدم تقرير مختصر باللغة العربية:
+
+📊 مؤشر EGX30:
+[الأداء العام]
+
+📰 أهم خبر:
+[الخبر الأهم المؤثر على السوق]
+
+💪 أقوى قطاع: [القطاع والسبب]
+⚠️ أضعف قطاع: [القطاع والسبب]
+
+🔍 أسهم لافتة:
+[2-3 أسهم مثيرة للاهتمام مع السبب]
+
+💡 توصية اليوم:
+[نصيحة استثمارية مختصرة]
+
+⚠️ استرشادي فقط — ليس توصية مالية رسمية`;
+  return await callClaudeWithSearch(prompt);
+}
+
 async function getUSDRate() {
   return new Promise((resolve) => {
     const options = {
@@ -820,6 +902,19 @@ async function checkDailySummaries() {
       `📱 <i>مساعد ثاندر RS</i>`
     );
     console.log('✅ Morning summary sent');
+  }
+
+  // 10 ص — تحليل السوق مع الافتتاح
+  if (cairoHour === 10 && CLAUDE_API_KEY) {
+    try {
+      const analysis = await getDailyMarketAnalysis();
+      await sendMessage(
+        `📊 <b>تحليل السوق المصري — افتتاح اليوم</b>\n\n` +
+        analysis +
+        `\n\n📱 <i>RS مساعد ثاندر</i>`
+      );
+      console.log('✅ Market analysis sent');
+    } catch(e) { console.log('Market analysis error:', e.message); }
   }
 
   // 2:30 ظ — إغلاق البورصة
