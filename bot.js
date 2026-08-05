@@ -239,8 +239,36 @@ async function checkAlerts() {
       const price = await getStockPrice(item.symbol);
       if (!price) continue;
       await updateFirebase(`watchlist/${key}`, { current: price });
+
+      const diff = ((price - item.target) / item.target * 100);
+
+      // وصل الهدف (نزل)
       if (price <= item.target) {
-        await sendMessage(`⭐ <b>تنبيه المراقبة!</b>\n\n📌 <b>${item.symbol}</b>\n💰 السعر: ${price.toFixed(2)} ج.م\n🎯 هدفك: ${item.target} ج.م\n\n✅ وصل سعر الشراء!\n\n📱 <i>مساعد ثاندر RS</i>`);
+        await sendMessage(
+          `⭐ <b>تنبيه المراقبة!</b>\n\n` +
+          `📌 <b>${item.symbol}</b>${item.name ? ' — ' + item.name : ''}\n` +
+          `💰 السعر الحالي: <b>${price.toFixed(2)} ج.م</b>\n` +
+          `🎯 هدفك: ${item.target.toFixed(2)} ج.م\n\n` +
+          `✅ <b>وصل سعر الشراء!</b> الفرصة جات 🚀\n` +
+          `📱 افتح الأداة واضغط "اشتري ✅"\n\n` +
+          `<i>RS مساعد ثاندر</i>`
+        );
+        alertsSent++;
+      }
+
+      // طلع كتير عن الهدف (+10%)
+      else if (diff > 10) {
+        await sendMessage(
+          `⚠️ <b>تنبيه — ${item.symbol} طلع عن هدفك!</b>\n\n` +
+          `💰 دلوقتي: <b>${price.toFixed(2)} ج.م</b>\n` +
+          `🎯 هدفك كان: ${item.target.toFixed(2)} ج.م\n` +
+          `📈 الفرق: +${diff.toFixed(1)}% فوق هدفك\n\n` +
+          `🤖 <b>خياراتك:</b>\n` +
+          `• اشتري جزء دلوقتي عند ${price.toFixed(2)}\n` +
+          `• استنى تصحيح عند ${(price * 0.95).toFixed(2)} ج.م\n` +
+          `• افتح الأداة → 🔄 حدّث التوصية\n\n` +
+          `<i>RS مساعد ثاندر</i>`
+        );
         alertsSent++;
       }
     }
