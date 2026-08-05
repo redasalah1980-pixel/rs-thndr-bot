@@ -290,6 +290,7 @@ async function handleCommand(text, chatId) {
       `/check — فحص التنبيهات دلوقتي\n` +
       `/summary — ملخص المحفظة والمراقبة\n` +
       `/portfolio — تفاصيل المحفظة\n` +
+      `/myanalyze — تحليل كل أسهمك دفعة واحدة\n` +
       `/gold — وضع الذهب بتاعك\n` +
       `/dollar — سعر الدولار دلوقتي\n` +
       `/market — حالة السوق المصري\n` +
@@ -454,7 +455,62 @@ async function handleCommand(text, chatId) {
       }
     }
 
-  } else if (text === '/dollar') {
+  } else if (text === '/myanalyze') {
+    await sendMessage('🔍 جاري تحليل كل أسهمك...', chatId);
+
+    const portfolio = await getFirebaseData('portfolio');
+    const watchlist = await getFirebaseData('watchlist');
+    let msg = '📊 <b>تحليل أسهمك كلها:</b>\n\n';
+    let hasAny = false;
+
+    // أسهم المحفظة
+    if (portfolio && Object.keys(portfolio).length > 0) {
+      msg += '💼 <b>المحفظة:</b>\n';
+      for (const s of Object.values(portfolio)) {
+        if (!s.symbol) continue;
+        hasAny = true;
+        // جرب تجيب سعر جديد
+        let livePrice = await getStockPrice(s.symbol);
+        const currentPrice = livePrice || s.currentPrice || s.buyPrice;
+        const pnl = (currentPrice - s.buyPrice) * s.shares;
+        const pct = (currentPrice - s.buyPrice) / s.buyPrice * 100;
+        const source = livePrice ? '📡' : '💾';
+
+        msg += `${pnl>=0?'📈':'📉'} <b>${s.symbol}</b> ${source}\n`;
+        msg += `   💰 ${currentPrice.toFixed(2)} ج.م\n`;
+        msg += `   ${pnl>=0?'✅':'❌'} ${pnl>=0?'+':''}${pnl.toFixed(2)} ج.م (${pct>=0?'+':''}${pct.toFixed(1)}%)\n`;
+        if (s.alertUp && currentPrice >= s.alertUp) msg += `   🎯 وصل هدف الربح!\n`;
+        if (s.alertDown && currentPrice <= s.alertDown) msg += `   🛑 وصل وقف الخسارة!\n`;
+        msg += '\n';
+      }
+    }
+
+    // أسهم المراقبة
+    if (watchlist && Object.keys(watchlist).length > 0) {
+      msg += '⭐ <b>المراقبة:</b>\n';
+      for (const w of Object.values(watchlist)) {
+        if (!w.symbol) continue;
+        hasAny = true;
+        let livePrice = await getStockPrice(w.symbol);
+        const currentPrice = livePrice || w.current || 0;
+        const diff = w.target > 0 ? ((currentPrice - w.target) / w.target * 100) : 0;
+        const source = livePrice ? '📡' : '💾';
+
+        msg += `${diff <= 0 ? '🟢' : diff <= 10 ? '🟡' : '⏳'} <b>${w.symbol}</b> ${source}\n`;
+        msg += `   💰 دلوقتي: ${currentPrice.toFixed(2)} ج.م\n`;
+        msg += `   🎯 هدفك: ${w.target.toFixed(2)} ج.م\n`;
+        msg += `   📊 ${diff <= 0 ? 'وصل الهدف! ✅' : diff <= 10 ? 'قريب جداً!' : 'لسه بعيد'} (${diff>=0?'+':''}${diff.toFixed(1)}%)\n\n`;
+      }
+    }
+
+    if (!hasAny) {
+      await sendMessage('📊 مفيش أسهم في محفظتك أو مراقبتك دلوقتي', chatId);
+    } else {
+      msg += `📡 المصدر: Twelve Data أو آخر تحديث\n`;
+      msg += `\n💡 للتحليل الكامل مع AI → افتح الأداة\n\n`;
+      msg += `📱 <i>RS مساعد ثاندر</i>`;
+      await sendMessage(msg, chatId);
+    }
     await sendMessage('💵 جاري جلب سعر الدولار...', chatId);
     const rate = await getUSDRate();
     if (!rate) {
