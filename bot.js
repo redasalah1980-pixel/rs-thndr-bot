@@ -286,20 +286,153 @@ async function handleCommand(text, chatId) {
     await sendMessage(
       `👋 <b>أهلاً يا Reda!</b>\n\n` +
       `🤖 أنا مساعد ثاندر RS Bot\n\n` +
-      `<b>الأوامر:</b>\n` +
+      `<b>الأوامر المتاحة:</b>\n` +
       `/check — فحص التنبيهات دلوقتي\n` +
-      `/summary — ملخص المحفظة\n` +
+      `/summary — ملخص المحفظة والمراقبة\n` +
+      `/portfolio — تفاصيل المحفظة\n` +
+      `/gold — وضع الذهب بتاعك\n` +
+      `/dollar — سعر الدولار دلوقتي\n` +
+      `/market — حالة السوق المصري\n` +
+      `/analyze ADIB — تحليل سهم معين\n` +
       `/status — حالة البوت\n` +
       `/help — قائمة الأوامر\n\n` +
-      `📱 <i>مساعد ثاندر RS</i>`, chatId
+      `📱 <i>RS مساعد ثاندر</i>`, chatId
     );
+
   } else if (text === '/check') {
     await sendMessage('🔍 جاري فحص التنبيهات...', chatId);
     const count = await checkAlerts();
     await sendMessage(`✅ تم الفحص!\n${count > 0 ? `📨 تم إرسال ${count} تنبيه` : '🔕 مفيش تنبيهات دلوقتي'}`, chatId);
+
   } else if (text === '/summary') {
     const summary = await buildFullSummary();
-    await sendMessage('📊 <b>ملخص المحفظة والمراقبة</b>\n\n' + summary + '\n📱 <i>مساعد ثاندر RS</i>', chatId);
+    await sendMessage('📊 <b>ملخص المحفظة والمراقبة</b>\n\n' + summary + '\n📱 <i>RS مساعد ثاندر</i>', chatId);
+
+  } else if (text === '/portfolio') {
+    const portfolio = await getFirebaseData('portfolio');
+    if (!portfolio || Object.keys(portfolio).length === 0) {
+      await sendMessage('💼 المحفظة فاضية دلوقتي\nأضف أسهمك من الأداة', chatId);
+    } else {
+      const stocks = Object.values(portfolio);
+      let msg = '💼 <b>تفاصيل محفظتك:</b>\n\n';
+      let totalCost = 0, totalValue = 0;
+      for (const s of stocks) {
+        const cost = (s.buyPrice||0) * (s.shares||0);
+        const value = (s.currentPrice||s.buyPrice||0) * (s.shares||0);
+        const pnl = value - cost;
+        const pct = cost > 0 ? (pnl/cost*100) : 0;
+        totalCost += cost; totalValue += value;
+        msg += `${pnl>=0?'📈':'📉'} <b>${s.symbol}</b>\n`;
+        msg += `   شراء: ${s.buyPrice} | دلوقتي: ${(s.currentPrice||s.buyPrice).toFixed(2)} ج.م\n`;
+        msg += `   ${s.shares} سهم | ${pnl>=0?'+':''}${pnl.toFixed(2)} ج.م (${pct>=0?'+':''}${pct.toFixed(1)}%)\n\n`;
+      }
+      const totalPnl = totalValue - totalCost;
+      const totalPct = totalCost > 0 ? (totalPnl/totalCost*100) : 0;
+      msg += `─────────────────\n`;
+      msg += `💰 الاستثمار: ${totalCost.toFixed(0)} ج.م\n`;
+      msg += `📊 القيمة: ${totalValue.toFixed(0)} ج.م\n`;
+      msg += `${totalPnl>=0?'✅':'❌'} ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} ج.م (${totalPct>=0?'+':''}${totalPct.toFixed(1)}%)\n\n`;
+      msg += `📱 <i>RS مساعد ثاندر</i>`;
+      await sendMessage(msg, chatId);
+    }
+
+  } else if (text === '/gold') {
+    const goldData = await getFirebaseData('gold_portfolio');
+    if (!goldData || !goldData.grams) {
+      await sendMessage('🥇 مش أضفت ذهبك لسه\nأضفه من الأداة في تبويب 🥇 ذهب', chatId);
+    } else {
+      const goldBuy = goldData.buyPrice * goldData.grams;
+      const goldCurrent = goldData.currentPrice * goldData.grams;
+      const goldPnl = goldCurrent - goldBuy;
+      const goldPct = goldBuy > 0 ? (goldPnl/goldBuy*100) : 0;
+      await sendMessage(
+        `🥇 <b>وضع ذهبك:</b>\n\n` +
+        `⚖️ ${goldData.grams} جرام\n` +
+        `💰 متوسط الشراء: ${goldData.buyPrice.toFixed(2)} ج.م/جرام\n` +
+        `📊 السعر الحالي: ${goldData.currentPrice.toFixed(2)} ج.م/جرام\n\n` +
+        `💵 تكلفة: ${goldBuy.toFixed(2)} ج.م\n` +
+        `📈 القيمة: ${goldCurrent.toFixed(2)} ج.م\n` +
+        `${goldPnl>=0?'✅':'❌'} ${goldPnl>=0?'+':''}${goldPnl.toFixed(2)} ج.م (${goldPct>=0?'+':''}${goldPct.toFixed(1)}%)\n\n` +
+        `📱 <i>RS مساعد ثاندر</i>`, chatId
+      );
+    }
+
+  } else if (text === '/market') {
+    const now = new Date();
+    const cairoHour = (now.getUTCHours() + 3) % 24;
+    const day = now.getDay();
+    const isWeekday = day >= 0 && day <= 4;
+    const isOpen = isWeekday && cairoHour >= 10 && cairoHour < 14.5;
+    await sendMessage(
+      `📊 <b>حالة السوق المصري:</b>\n\n` +
+      `${isOpen ? '🟢 البورصة مفتوحة دلوقتي' : '🔴 البورصة مغلقة'}\n\n` +
+      `🕙 أوقات التداول: 10 ص — 2:30 م\n` +
+      `📅 أيام العمل: الأحد — الخميس\n\n` +
+      `${!isOpen && isWeekday && cairoHour < 10 ? `⏰ بيفتح بعد ${(10-cairoHour).toFixed(0)} ساعة تقريباً\n\n` : ''}` +
+      `💡 للأسعار اللحظية افتح ثاندر\n\n` +
+      `📱 <i>RS مساعد ثاندر</i>`, chatId
+    );
+
+  } else if (text && text.startsWith('/analyze ')) {
+    const symbol = text.replace('/analyze ', '').trim().toUpperCase();
+    if (!symbol) {
+      await sendMessage('⚠️ مثال: /analyze ADIB', chatId);
+    } else {
+      await sendMessage(`🔍 جاري تحليل <b>${symbol}</b>...`, chatId);
+      const price = await getStockPrice(symbol);
+      if (!price) {
+        await sendMessage(`❌ مش قادر أجيب سعر ${symbol}\nتأكد من الرمز وجرب تاني`, chatId);
+      } else {
+        const watchlist = await getFirebaseData('watchlist');
+        const portfolio = await getFirebaseData('portfolio');
+        let extra = '';
+        if (watchlist) {
+          const w = Object.values(watchlist).find(w => w.symbol === symbol);
+          if (w) {
+            const diff = ((price - w.target) / w.target * 100);
+            extra += `\n⭐ في مراقبتك عند: ${w.target} ج.م\n`;
+            extra += diff > 0 ? `📈 فوق هدفك بـ +${diff.toFixed(1)}%\n` : `✅ تحت هدفك — فرصة شراء!\n`;
+          }
+        }
+        if (portfolio) {
+          const s = Object.values(portfolio).find(s => s.symbol === symbol);
+          if (s) {
+            const pnl = (price - s.buyPrice) * s.shares;
+            const pct = (price - s.buyPrice) / s.buyPrice * 100;
+            extra += `\n💼 في محفظتك: ${s.shares} سهم بـ ${s.buyPrice} ج.م\n`;
+            extra += `${pnl>=0?'✅':'❌'} ${pnl>=0?'+':''}${pnl.toFixed(2)} ج.م (${pct>=0?'+':''}${pct.toFixed(1)}%)\n`;
+          }
+        }
+        await sendMessage(
+          `📊 <b>تحليل ${symbol}</b>\n\n` +
+          `💰 السعر الحالي: <b>${price.toFixed(2)} ج.م</b>\n` +
+          `📡 المصدر: Twelve Data (تأخير 15 دقيقة)` +
+          extra +
+          `\n💡 للتحليل الكامل مع AI → افتح الأداة\n\n` +
+          `📱 <i>RS مساعد ثاندر</i>`, chatId
+        );
+      }
+    }
+
+  } else if (text === '/dollar') {
+    await sendMessage('💵 جاري جلب سعر الدولار...', chatId);
+    const rate = await getUSDRate();
+    if (!rate) {
+      await sendMessage('❌ مش قادر أجيب السعر دلوقتي — جرب تاني', chatId);
+    } else {
+      await sendMessage(
+        `💵 <b>سعر الدولار الأمريكي</b>\n\n` +
+        `1 دولار = <b>${rate.toFixed(2)} جنيه مصري</b>\n\n` +
+        `📡 المصدر: Twelve Data\n` +
+        `🕐 تأخير 15 دقيقة\n\n` +
+        `💡 <b>أهميته للمستثمر:</b>\n` +
+        `• الذهب مرتبط بالدولار مباشرة\n` +
+        `• أسهم التصدير بتستفيد من ارتفاعه\n` +
+        `• ارتفاعه = تضخم في المواد المستوردة\n\n` +
+        `📱 <i>RS مساعد ثاندر</i>`, chatId
+      );
+    }
+
   } else if (text === '/status') {
     await sendMessage(
       `✅ <b>البوت شغال!</b>\n\n` +
@@ -307,8 +440,9 @@ async function handleCommand(text, chatId) {
       `🌅 ملخص صباحي الساعة 9 ص\n` +
       `📊 ملخص إغلاق الساعة 2 ظ\n` +
       `🌙 ملخص مسائي الساعة 9 م\n` +
-      `🔥 Firebase: متصل\n\n` +
-      `📱 <i>مساعد ثاندر RS</i>`, chatId
+      `🔥 Firebase: متصل\n` +
+      `📡 Twelve Data: متصل\n\n` +
+      `📱 <i>RS مساعد ثاندر</i>`, chatId
     );
   }
 }
@@ -337,13 +471,43 @@ async function pollUpdates() {
   }
 }
 
-// ===== Build Full Summary =====
+// ===== Get USD/EGP Rate =====
+async function getUSDRate() {
+  return new Promise((resolve) => {
+    const options = {
+      hostname: 'api.twelvedata.com',
+      path: `/price?symbol=USD/EGP&apikey=${TWELVE_DATA_KEY}`,
+      method: 'GET',
+      timeout: 8000
+    };
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          const rate = json?.price ? parseFloat(json.price) : null;
+          resolve(rate);
+        } catch { resolve(null); }
+      });
+    });
+    req.on('error', () => resolve(null));
+    req.on('timeout', () => { req.destroy(); resolve(null); });
+    req.end();
+  });
+}
 async function buildFullSummary() {
   const portfolio = await getFirebaseData('portfolio');
   const watchlist = await getFirebaseData('watchlist');
   const goldData = await getFirebaseData('gold_portfolio');
+  const usdRate = await getUSDRate();
 
   let msg = '';
+
+  // سعر الدولار
+  if (usdRate) {
+    msg += `💵 <b>الدولار/جنيه:</b> ${usdRate.toFixed(2)} ج.م\n\n`;
+  }
 
   // المحفظة
   if (portfolio && Object.keys(portfolio).length > 0) {
