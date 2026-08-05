@@ -373,10 +373,18 @@ async function handleCommand(text, chatId) {
       `📱 <i>RS مساعد ثاندر</i>`, chatId
     );
 
-  } else if (text && text.startsWith('/analyze ')) {
-    const symbol = text.replace('/analyze ', '').trim().toUpperCase();
+  } else if (text && (text === '/analyze' || text.startsWith('/analyze '))) {
+    const parts = text.split(' ');
+    const symbol = parts[1] ? parts[1].trim().toUpperCase() : null;
     if (!symbol) {
-      await sendMessage('⚠️ مثال: /analyze ADIB', chatId);
+      await sendMessage(
+        `📊 <b>تحليل سهم</b>\n\n` +
+        `اكتب الأمر مع رمز السهم:\n` +
+        `<code>/analyze ADIB</code>\n` +
+        `<code>/analyze TMGH</code>\n` +
+        `<code>/analyze COMI</code>\n\n` +
+        `📱 <i>RS مساعد ثاندر</i>`, chatId
+      );
     } else {
       await sendMessage(`🔍 جاري تحليل <b>${symbol}</b>...`, chatId);
       let price = null;
