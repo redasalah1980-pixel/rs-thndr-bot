@@ -561,6 +561,8 @@ async function handleCommand(text, chatId) {
       msg += `📱 <i>RS مساعد ثاندر</i>`;
       await sendMessage(msg, chatId);
     }
+
+  } else if (text === '/dollar') {
     await sendMessage('💵 جاري جلب سعر الدولار...', chatId);
     const rate = await getUSDRate();
     if (!rate) {
