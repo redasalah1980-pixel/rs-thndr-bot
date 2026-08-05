@@ -508,6 +508,20 @@ async function handleCommand(text, chatId) {
       }
     }
 
+    // الذهب
+    const goldData = await getFirebaseData('gold_portfolio');
+    if (goldData && goldData.grams) {
+      hasAny = true;
+      const goldBuy = goldData.buyPrice * goldData.grams;
+      const goldCurrent = goldData.currentPrice * goldData.grams;
+      const goldPnl = goldCurrent - goldBuy;
+      const goldPct = goldBuy > 0 ? (goldPnl/goldBuy*100) : 0;
+      msg += `🥇 <b>الذهب:</b>\n`;
+      msg += `   ⚖️ ${goldData.grams} جرام\n`;
+      msg += `   💰 ${goldData.currentPrice.toFixed(2)} ج.م/جرام\n`;
+      msg += `   ${goldPnl>=0?'✅':'❌'} ${goldPnl>=0?'+':''}${goldPnl.toFixed(2)} ج.م (${goldPct>=0?'+':''}${goldPct.toFixed(1)}%)\n\n`;
+    }
+
     if (!hasAny) {
       await sendMessage('📊 مفيش أسهم في محفظتك أو مراقبتك دلوقتي', chatId);
     } else {
