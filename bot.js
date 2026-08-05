@@ -318,25 +318,35 @@ async function handleCommand(text, chatId) {
     if (!portfolio || Object.keys(portfolio).length === 0) {
       await sendMessage('💼 المحفظة فاضية دلوقتي\nأضف أسهمك من الأداة', chatId);
     } else {
+      await sendMessage('📊 جاري تحديث الأسعار...', chatId);
       const stocks = Object.values(portfolio);
       let msg = '💼 <b>تفاصيل محفظتك:</b>\n\n';
       let totalCost = 0, totalValue = 0;
       for (const s of stocks) {
+        // جيب السعر الحي أولاً
+        let livePrice = await getStockPrice(s.symbol);
+        const currentPrice = (livePrice && livePrice > 0) ? livePrice : (s.currentPrice || s.buyPrice || 0);
+        const source = (livePrice && livePrice > 0) ? '📡' : '💾';
         const cost = (s.buyPrice||0) * (s.shares||0);
-        const value = (s.currentPrice||s.buyPrice||0) * (s.shares||0);
+        const value = currentPrice * (s.shares||0);
         const pnl = value - cost;
         const pct = cost > 0 ? (pnl/cost*100) : 0;
         totalCost += cost; totalValue += value;
-        msg += `${pnl>=0?'📈':'📉'} <b>${s.symbol}</b>\n`;
-        msg += `   شراء: ${s.buyPrice} | دلوقتي: ${(s.currentPrice||s.buyPrice).toFixed(2)} ج.م\n`;
+        msg += `${pnl>=0?'📈':'📉'} <b>${s.symbol}</b> ${source}\n`;
+        msg += `   شراء: ${s.buyPrice} | دلوقتي: ${currentPrice.toFixed(2)} ج.م\n`;
         msg += `   ${s.shares} سهم | ${pnl>=0?'+':''}${pnl.toFixed(2)} ج.م (${pct>=0?'+':''}${pct.toFixed(1)}%)\n\n`;
+        // حدث Firebase بالسعر الجديد
+        if (livePrice && livePrice > 0) {
+          await updateFirebase(`portfolio/${Object.keys(portfolio).find(k => portfolio[k].symbol === s.symbol)}`, { currentPrice: livePrice });
+        }
       }
       const totalPnl = totalValue - totalCost;
       const totalPct = totalCost > 0 ? (totalPnl/totalCost*100) : 0;
       msg += `─────────────────\n`;
       msg += `💰 الاستثمار: ${totalCost.toFixed(0)} ج.م\n`;
       msg += `📊 القيمة: ${totalValue.toFixed(0)} ج.م\n`;
-      msg += `${totalPnl>=0?'✅':'❌'} ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} ج.م (${totalPct>=0?'+':''}${totalPct.toFixed(1)}%)\n\n`;
+      msg += `${totalPnl>=0?'✅':'❌'} ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} ج.م (${totalPct>=0?'+':''}${totalPct.toFixed(1)}%)\n`;
+      msg += `\n📡 = Twelve Data | 💾 = آخر تحديث محفوظ\n\n`;
       msg += `📱 <i>RS مساعد ثاندر</i>`;
       await sendMessage(msg, chatId);
     }
