@@ -388,6 +388,9 @@ async function handleCommand(text, chatId) {
     } else {
       await sendMessage(`🔍 جاري تحليل <b>${symbol}</b>...`, chatId);
       let price = null;
+      let priceSource = 'Twelve Data (تأخير 15 دقيقة)';
+
+      // أولاً — جرب Twelve Data
       try {
         price = await getStockPrice(symbol);
         console.log(`/analyze ${symbol}: price=${price}`);
@@ -395,16 +398,29 @@ async function handleCommand(text, chatId) {
         console.error(`/analyze error: ${e.message}`);
       }
 
+      // لو مش لاقي — جرب من Firebase
       if (!price) {
-        // جرب بدون exchange
+        const fbPortfolio = await getFirebaseData('portfolio');
+        const fbWatchlist = await getFirebaseData('watchlist');
+        if (fbPortfolio) {
+          const s = Object.values(fbPortfolio).find(s => s.symbol === symbol);
+          if (s && s.currentPrice) { price = s.currentPrice; priceSource = 'آخر تحديث في محفظتك'; }
+        }
+        if (!price && fbWatchlist) {
+          const w = Object.values(fbWatchlist).find(w => w.symbol === symbol);
+          if (w && w.current) { price = w.current; priceSource = 'آخر تحديث في مراقبتك'; }
+        }
+      }
+
+      if (!price) {
         await sendMessage(
           `⚠️ <b>${symbol}</b>\n\n` +
-          `مش قادر أجيب السعر من Twelve Data دلوقتي\n\n` +
+          `مش قادر أجيب السعر دلوقتي\n\n` +
           `الأسباب المحتملة:\n` +
-          `• الرمز مش موجود في EGX\n` +
+          `• السهم مش في Twelve Data المجاني\n` +
           `• البورصة مغلقة دلوقتي\n` +
-          `• مشكلة مؤقتة في الاتصال\n\n` +
-          `💡 تأكد من الرمز وجرب: /analyze ADIB`, chatId
+          `• مش في محفظتك أو مراقبتك\n\n` +
+          `💡 حدّث السعر يدوياً من الأداة وجرب تاني`, chatId
         );
       } else {
         const watchlist = await getFirebaseData('watchlist');
@@ -429,8 +445,8 @@ async function handleCommand(text, chatId) {
         }
         await sendMessage(
           `📊 <b>تحليل ${symbol}</b>\n\n` +
-          `💰 السعر الحالي: <b>${price.toFixed(2)} ج.م</b>\n` +
-          `📡 Twelve Data (تأخير 15 دقيقة)` +
+          `💰 السعر: <b>${price.toFixed(2)} ج.م</b>\n` +
+          `📡 ${priceSource}` +
           extra +
           `\n\n💡 للتحليل الكامل مع AI → افتح الأداة\n\n` +
           `📱 <i>RS مساعد ثاندر</i>`, chatId
