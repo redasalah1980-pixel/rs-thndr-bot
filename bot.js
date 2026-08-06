@@ -967,7 +967,7 @@ async function buildFullSummary() {
 async function checkDailySummaries() {
   const now = new Date();
   const cairoHour = (now.getUTCHours() + 3) % 24;
-  const cairoDow = (now.getUTCDay() + 1) % 7; // 0=أحد
+  const cairoDow = now.getUTCDay(); // 0=أحد، 1=اثنين، 5=جمعة، 4=خميس
   const mins = now.getUTCMinutes();
   if (mins !== 0) return;
 
