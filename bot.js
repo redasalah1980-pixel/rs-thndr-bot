@@ -373,29 +373,32 @@ async function handleCommand(text, chatId) {
     }
 
   } else if (text === '/market' || text === '/market_analysis') {
-    await sendMessage('📊 جاري تحليل السوق المصري...', chatId);
+    await sendMessage('📊 جاري تحليل السوق المصري... (ممكن ياخد دقيقة)', chatId);
     if (!CLAUDE_API_KEY) {
-      const now = new Date();
-      const cairoHour = (now.getUTCHours() + 3) % 24;
-      const day = now.getDay();
-      const isWeekday = day >= 0 && day <= 4;
-      const isOpen = isWeekday && cairoHour >= 10 && cairoHour < 14.5;
-      await sendMessage(
-        `📊 <b>حالة السوق المصري:</b>\n\n` +
-        `${isOpen ? '🟢 البورصة مفتوحة دلوقتي' : '🔴 البورصة مغلقة'}\n\n` +
-        `🕙 أوقات التداول: 10 ص — 2:30 م\n` +
-        `📅 أيام العمل: الأحد — الخميس\n\n` +
-        `💡 للتحليل الكامل أضف CLAUDE_API_KEY\n\n` +
-        `📱 <i>RS مساعد ثاندر</i>`, chatId
-      );
+      await sendMessage('⚠️ محتاج CLAUDE_API_KEY في Railway\n\n📱 <i>RS مساعد ثاندر</i>', chatId);
     } else {
-      const analysis = await getDailyMarketAnalysis();
-      await sendMessage(
-        `📊 <b>تحليل السوق المصري اليوم</b>\n\n` +
-        analysis +
-        `\n\n⚠️ <i>استرشادي فقط — ليس توصية مالية رسمية</i>\n` +
-        `📱 <i>RS مساعد ثاندر</i>`, chatId
-      );
+      try {
+        const analysis = await getDailyMarketAnalysis();
+        const parts = analysis.split('━━━━━━━━━━━━━━\n');
+        if (parts.length > 1 && parts[1] && parts[1].trim()) {
+          await sendMessage(
+            `📊 <b>تحليل السوق المصري</b>\n\n` + parts[0] +
+            `\n⚠️ <i>استرشادي للتعلم</i>\n📱 <i>RS مساعد ثاندر</i>`, chatId
+          );
+          await sendMessage(
+            `💼 <b>توصيات لأسهمك</b>\n\n` + parts[1] +
+            `\n⚠️ <i>استرشادي للتعلم</i>\n📱 <i>RS مساعد ثاندر</i>`, chatId
+          );
+        } else {
+          await sendMessage(
+            `📊 <b>تحليل السوق المصري</b>\n\n` + analysis +
+            `\n\n⚠️ <i>استرشادي للتعلم</i>\n📱 <i>RS مساعد ثاندر</i>`, chatId
+          );
+        }
+      } catch(e) {
+        console.error('Market analysis error:', e.message);
+        await sendMessage('❌ خطأ في التحليل — جرب تاني بعد دقيقة', chatId);
+      }
     }
 
   } else if (text && (text === '/analyze' || text.startsWith('/analyze '))) {
@@ -791,72 +794,69 @@ async function getDailyMarketAnalysis() {
   let watchlistText = '';
   if (watchlist && Object.keys(watchlist).length > 0) {
     watchlistText = Object.values(watchlist).map(w =>
-      `${w.symbol} (هدف شراء ${w.target} | دلوقتي ${(w.current||0).toFixed(2)} ج.م)`
+      `${w.symbol} (هدف ${w.target} | دلوقتي ${(w.current||0).toFixed(2)} ج.م)`
     ).join('\n');
   }
 
-  const prompt = `أنت محلل مالي متخصص في البورصة المصرية EGX. اكتب تقريراً شاملاً ومكتملاً بدون اختصار.
+  // الجزء الأول — السوق العام
+  const marketPrompt = `أنت محلل مالي متخصص في البورصة المصرية.
+ابحث في الإنترنت عن أداء السوق المصري اليوم وقدم:
 
-ابحث في الإنترنت الآن عن:
-1. أداء مؤشر EGX30 آخر جلسة بالأرقام الدقيقة
-2. أهم 3 أخبار اقتصادية مصرية اليوم
-3. أداء كل القطاعات (بنوك، عقارات، صناعة، غذاء، اتصالات)
-4. أسهم ارتفعت وانخفضت بشكل لافت
-5. قرارات البنك المركزي أو أرباح الشركات
-6. سعر الدولار والذهب
-
-${portfolioText ? `محفظة المستثمر:\n${portfolioText}` : ''}
-${watchlistText ? `\nقائمة المراقبة:\n${watchlistText}` : ''}
-
-اكتب التقرير كاملاً:
-
-━━━━━━━━━━━━━━━━━━━
-📊 <b>مؤشر EGX30:</b>
-[الرقم + النسبة + الاتجاه]
-
+━━━━━━━━━━━━━━
+📊 <b>مؤشر EGX30:</b> [الرقم + النسبة]
 💵 <b>الدولار/جنيه:</b> [السعر]
-🥇 <b>الذهب:</b> [السعر العالمي بالدولار]
+🥇 <b>الذهب العالمي:</b> [دولار/أوقية]
 
-━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━
 📰 <b>أهم أخبار اليوم:</b>
 • [خبر 1 + تأثيره]
 • [خبر 2 + تأثيره]
 • [خبر 3 + تأثيره]
 
-━━━━━━━━━━━━━━━━━━━
-🏭 <b>أداء القطاعات:</b>
-💪 الأقوى: [القطاع] — [السبب]
-⚠️ الأضعف: [القطاع] — [السبب]
-[باقي القطاعات باختصار]
+━━━━━━━━━━━━━━
+🏭 <b>القطاعات:</b>
+💪 الأقوى: [القطاع + السبب]
+⚠️ الأضعف: [القطاع + السبب]
 
-━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━
 🔍 <b>أسهم لافتة:</b>
 📈 [سهم] +[نسبة]% — [السبب]
 📈 [سهم] +[نسبة]% — [السبب]
 📉 [سهم] -[نسبة]% — [السبب]
 
-━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━
 🛒 <b>فرص شراء محتملة:</b>
 • [سهم] عند [سعر] — [السبب]
 • [سهم] عند [سعر] — [السبب]
 
-🚫 <b>أسهم يُفضل تجنبها:</b>
+🚫 <b>أسهم تجنبها:</b>
 • [سهم] — [السبب]
 
-━━━━━━━━━━━━━━━━━━━
-${portfolioText ? `💼 <b>توصيات لمحفظتك:</b>
-[لكل سهم: احتفظ/بيع جزء/زيد + السبب من أخبار اليوم]
+💡 <b>توصية اليوم:</b>
+[نصيحة عملية محددة]`;
 
-` : ''}${watchlistText ? `⭐ <b>توصيات لقائمة مراقبتك:</b>
-[لكل سهم: هل حان وقت الشراء؟ + السبب]
+  const marketResult = await callClaudeWithSearch(marketPrompt, 1500);
 
-` : ''}━━━━━━━━━━━━━━━━━━━
-💡 <b>توصية اليوم الختامية:</b>
-[نصيحة عملية محددة]
+  // لو في محفظة أو مراقبة — رسالة تانية للتوصيات
+  if (portfolioText || watchlistText) {
+    const personalPrompt = `أنت مستشار استثماري. بناءً على أخبار السوق المصري اليوم:
 
-⚠️ استرشادي للتعلم — ليس توصية مالية رسمية`;
+${portfolioText ? `محفظة المستثمر:\n${portfolioText}\n` : ''}
+${watchlistText ? `قائمة المراقبة:\n${watchlistText}\n` : ''}
 
-  return await callClaudeWithSearch(prompt, 3000);
+ابحث عن أخبار هذه الأسهم تحديداً وقدم:
+
+${portfolioText ? `💼 <b>توصيات المحفظة:</b>
+[لكل سهم: احتفظ/بيع جزء/زيد + السبب]
+
+` : ''}${watchlistText ? `⭐ <b>توصيات المراقبة:</b>
+[لكل سهم: اشتري الآن/انتظر + السبب]` : ''}`;
+
+    const personalResult = await callClaudeWithSearch(personalPrompt, 1000);
+    return marketResult + '\n\n━━━━━━━━━━━━━━\n' + personalResult;
+  }
+
+  return marketResult;
 }
 
 async function getUSDRate() {
