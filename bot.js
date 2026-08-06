@@ -287,20 +287,26 @@ async function handleCommand(text, chatId) {
     await sendMessage(
       `👋 <b>أهلاً يا Reda!</b>\n\n` +
       `🤖 أنا مساعد ثاندر RS Bot\n\n` +
-      `<b>الأوامر المتاحة:</b>\n` +
+      `<b>🆓 أوامر مجانية:</b>\n` +
       `/check — فحص التنبيهات دلوقتي\n` +
       `/summary — ملخص المحفظة والمراقبة\n` +
       `/portfolio — تفاصيل المحفظة\n` +
       `/myanalyze — تحليل كل أسهمك\n` +
-      `/suggest — 🤖 AI يوصي لكل سهم\n` +
-      `/market — 📊 تحليل السوق المصري\n` +
-      `/week — 📅 التقرير الأسبوعي\n` +
-      `/learn — 📚 مصطلح استثماري جديد\n` +
       `/gold — وضع الذهب بتاعك\n` +
       `/dollar — سعر الدولار دلوقتي\n` +
       `/analyze ADIB — تحليل سهم معين\n` +
-      `/status — حالة البوت\n` +
-      `/help — قائمة الأوامر\n\n` +
+      `/week — التقرير الأسبوعي\n` +
+      `/status — حالة البوت\n\n` +
+      `<b>🤖 أوامر بتستخدم AI (مدفوعة):</b>\n` +
+      `/suggest — AI يوصي لكل سهم عندك\n` +
+      `/market — تحليل السوق المصري\n` +
+      `/learn — درس استثماري جديد\n\n` +
+      `<b>⏰ تلقائي كل يوم (مجاني):</b>\n` +
+      `🌅 9 ص — ملخص صباحي\n` +
+      `📊 2 ظ — ملخص الإغلاق\n` +
+      `🌙 9 م — ملخص مسائي\n` +
+      `📅 جمعة 6م — تقرير أسبوعي\n` +
+      `🥇 اثنين 9ص — تذكير الذهب\n\n` +
       `📱 <i>RS مساعد ثاندر</i>`, chatId
     );
 
@@ -965,7 +971,7 @@ async function checkDailySummaries() {
   const mins = now.getUTCMinutes();
   if (mins !== 0) return;
 
-  // 9 ص — صباحي
+  // 9 ص — صباحي (بدون AI)
   if (cairoHour === 9) {
     const summary = await buildFullSummary();
     await sendMessage(
@@ -978,21 +984,7 @@ async function checkDailySummaries() {
     console.log('✅ Morning summary sent');
   }
 
-  // 10 ص — تحليل السوق مع الافتتاح
-  if (cairoHour === 10 && CLAUDE_API_KEY) {
-    try {
-      const analysis = await getDailyMarketAnalysis();
-      await sendMessage(
-        `📊 <b>تحليل السوق المصري — افتتاح اليوم</b>\n\n` +
-        analysis +
-        `\n\n⚠️ <i>استرشادي للتعلم — ليس توصية رسمية</i>\n` +
-        `📱 <i>RS مساعد ثاندر</i>`
-      );
-      console.log('✅ Market analysis sent');
-    } catch(e) { console.log('Market analysis error:', e.message); }
-  }
-
-  // 2:30 ظ — إغلاق البورصة
+  // 2:30 ظ — إغلاق البورصة (بدون AI)
   if (cairoHour === 14) {
     const summary = await buildFullSummary();
     await sendMessage(
@@ -1005,27 +997,20 @@ async function checkDailySummaries() {
     console.log('✅ Closing summary sent');
   }
 
-  // 9 م — مسائي + توصية AI
+  // 9 م — مسائي (بدون AI)
   if (cairoHour === 21) {
     const summary = await buildFullSummary();
-    let aiTip = '';
-    if (CLAUDE_API_KEY) {
-      try {
-        const suggestions = await getAISuggestions();
-        aiTip = `\n\n💡 <b>توصية AI المسائية:</b>\n${suggestions}`;
-      } catch(e) { console.log('AI suggest error:', e.message); }
-    }
     await sendMessage(
       `🌙 <b>مساء الخير يا Reda!</b>\n\n` +
       summary +
-      aiTip +
-      `\n\n🕙 البورصة بتفتح بكره 10 ص\n\n` +
+      `\n\n💡 لو عايز توصيات AI اكتب /suggest\n` +
+      `🕙 البورصة بتفتح بكره 10 ص\n\n` +
       `📱 <i>RS مساعد ثاندر</i>`
     );
     console.log('✅ Evening summary sent');
   }
 
-  // الجمعة 6 م — تقرير أسبوعي
+  // الجمعة 6 م — تقرير أسبوعي (بدون AI)
   if (cairoHour === 18 && cairoDow === 5) {
     await sendWeeklyReport();
   }
@@ -1042,11 +1027,6 @@ async function checkDailySummaries() {
         `📱 <i>RS مساعد ثاندر</i>`
       );
     }
-  }
-
-  // مصطلح استثماري يومي الساعة 8 ص
-  if (cairoHour === 8 && CLAUDE_API_KEY) {
-    await sendDailyLesson();
   }
 }
 
