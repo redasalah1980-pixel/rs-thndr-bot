@@ -2,8 +2,8 @@ const https = require('https');
 const http = require('http');
 
 // ===== CONFIG =====
-const BOT_TOKEN = process.env.BOT_TOKEN || '8984910077:AAETlpDzQm7jVFbuBoDD0zpcrzDWxcv9gdA';
-const CHAT_ID = process.env.CHAT_ID || '344402775';
+const BOT_TOKEN = '8984910077:AAETlpDzQm7jVFbuBoDD0zpcrzDWxcv9gdA';
+const CHAT_ID = '344402775';
 const FIREBASE_URL = 'https://rs-thndr-assistant-default-rtdb.europe-west1.firebasedatabase.app';
 const CHECK_INTERVAL = 60 * 60 * 1000;
 const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY || '';
