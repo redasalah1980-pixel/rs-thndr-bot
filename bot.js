@@ -2,8 +2,8 @@ const https = require('https');
 const http = require('http');
 
 // ===== CONFIG =====
-const BOT_TOKEN = '8984910077:AAETlpDzQm7jVFbuBoDD0zpcrzDWxcv9gdA';
-const CHAT_ID = '344402775';
+const BOT_TOKEN = process.env.BOT_TOKEN || '8984910077:AAETlpDzQm7jVFbuBoDD0zpcrzDWxcv9gdA';
+const CHAT_ID = process.env.CHAT_ID || '344402775';
 const FIREBASE_URL = 'https://rs-thndr-assistant-default-rtdb.europe-west1.firebasedatabase.app';
 const CHECK_INTERVAL = 60 * 60 * 1000;
 const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY || '';
@@ -1033,29 +1033,62 @@ async function checkDailySummaries() {
 // ===== Weekly Report =====
 async function sendWeeklyReport() {
   const portfolio = await getFirebaseData('portfolio');
+  const watchlist = await getFirebaseData('watchlist');
   const goldData = await getFirebaseData('gold_portfolio');
 
   let msg = `📅 <b>التقرير الأسبوعي — جمعة مباركة يا Reda!</b>\n\n`;
 
+  // ===== المحفظة (مع سعر كل سهم) =====
   if (portfolio && Object.keys(portfolio).length > 0) {
     const stocks = Object.values(portfolio);
     let totalCost = 0, totalValue = 0;
-    stocks.forEach(s => {
-      totalCost += (s.buyPrice||0) * (s.shares||0);
-      totalValue += (s.currentPrice||s.buyPrice||0) * (s.shares||0);
-    });
-    const pnl = totalValue - totalCost;
-    const pct = totalCost > 0 ? (pnl/totalCost*100) : 0;
+    let stockLines = '';
+    for (const s of stocks) {
+      let livePrice = await getStockPrice(s.symbol);
+      const currentPrice = (livePrice && livePrice > 0) ? livePrice : (s.currentPrice || s.buyPrice || 0);
+      const source = (livePrice && livePrice > 0) ? '📡' : '💾';
+      const cost = (s.buyPrice||0) * (s.shares||0);
+      const value = currentPrice * (s.shares||0);
+      const pnl = value - cost;
+      const pct = cost > 0 ? (pnl/cost*100) : 0;
+      totalCost += cost; totalValue += value;
+      stockLines += `${pnl>=0?'📈':'📉'} <b>${s.symbol}</b> ${source} — ${currentPrice.toFixed(2)} ج.م (${pnl>=0?'+':''}${pct.toFixed(1)}%)\n`;
+    }
+    const totalPnl = totalValue - totalCost;
+    const totalPct = totalCost > 0 ? (totalPnl/totalCost*100) : 0;
     msg += `💼 <b>أداء المحفظة هذا الأسبوع:</b>\n`;
-    msg += `💰 القيمة: ${totalValue.toFixed(0)} ج.م\n`;
-    msg += `${pnl>=0?'✅':'❌'} الربح/الخسارة: ${pnl>=0?'+':''}${pnl.toFixed(2)} ج.م (${pct>=0?'+':''}${pct.toFixed(1)}%)\n\n`;
+    msg += stockLines;
+    msg += `💰 القيمة الإجمالية: ${totalValue.toFixed(0)} ج.م\n`;
+    msg += `${totalPnl>=0?'✅':'❌'} الربح/الخسارة: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} ج.م (${totalPct>=0?'+':''}${totalPct.toFixed(1)}%)\n\n`;
   }
 
+  // ===== المراقبة (مع سعر كل سهم) — كانت ناقصة تمامًا من التقرير القديم =====
+  if (watchlist && Object.keys(watchlist).length > 0) {
+    msg += `⭐ <b>قائمة المراقبة:</b>\n`;
+    for (const w of Object.values(watchlist)) {
+      if (!w.symbol) continue;
+      let livePrice = null;
+      try { livePrice = await getStockPrice(w.symbol); } catch(e) {}
+      const currentPrice = (livePrice && livePrice > 0) ? livePrice : (w.current || 0);
+      const source = (livePrice && livePrice > 0) ? '📡' : '💾';
+      const diff = w.target > 0 && currentPrice > 0 ? ((currentPrice - w.target) / w.target * 100) : null;
+      const status = diff === null ? '⏳' : diff <= 0 ? '🟢 وصل الهدف!' : diff <= 10 ? '🟡 قريب' : '⏳ لسه بعيد';
+
+      msg += `${source} <b>${w.symbol}</b>${w.name ? ' — ' + w.name : ''}\n`;
+      msg += currentPrice > 0 ? `   💰 دلوقتي: ${currentPrice.toFixed(2)} ج.م` : `   💰 السعر: غير محدث`;
+      msg += ` | 🎯 هدفك: ${(w.target||0).toFixed(2)} ج.م\n`;
+      msg += `   ${status}${diff !== null ? ` (${diff>=0?'+':''}${diff.toFixed(1)}%)` : ''}\n`;
+    }
+    msg += '\n';
+  }
+
+  // ===== الذهب (مع السعر الحالي للجرام) =====
   if (goldData && goldData.grams) {
     const goldPnl = (goldData.currentPrice - goldData.buyPrice) * goldData.grams;
     const goldPct = goldData.buyPrice > 0 ? (goldPnl/goldData.buyPrice/goldData.grams*100) : 0;
     msg += `🥇 <b>الذهب:</b>\n`;
-    msg += `${goldPnl>=0?'✅':'❌'} ${goldPnl>=0?'+':''}${goldPnl.toFixed(2)} ج.م\n\n`;
+    msg += `   ⚖️ ${goldData.grams} جرام | 💰 السعر الحالي: ${goldData.currentPrice.toFixed(2)} ج.م/جرام\n`;
+    msg += `   ${goldPnl>=0?'✅':'❌'} ${goldPnl>=0?'+':''}${goldPnl.toFixed(2)} ج.م (${goldPct>=0?'+':''}${goldPct.toFixed(1)}%)\n\n`;
   }
 
   msg += `💡 <b>سؤال للتأمل:</b>\n`;
